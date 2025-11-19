@@ -224,6 +224,10 @@ class Aspire:
             from .samplers.smc.minipcn import MiniPCNSMC as SamplerClass
         elif sampler_type == "blackjax_smc":
             from .samplers.smc.blackjax import BlackJAXSMC as SamplerClass
+        elif sampler_type == "hamiltonian_smc":
+            from .samplers.smc.hamiltonian import (
+                HamiltonianSMC as SamplerClass,
+            )
         else:
             raise ValueError(f"Unknown sampler type: {sampler_type}")
         return SamplerClass
