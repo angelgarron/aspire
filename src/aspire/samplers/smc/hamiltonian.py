@@ -111,7 +111,12 @@ class HamiltonianSMC(SMCSampler):
         chain = []
 
         for i in range(n_steps or self.sampler_kwargs["n_steps"]):
-            z = _hmc_step(z, log_prob_fn)
+            z = _hmc_step(
+                z,
+                log_prob_fn,
+                self.sampler_kwargs.get("step_size", 0.05),
+                self.sampler_kwargs.get("num_integration_steps", 10),
+            )
             chain.append(z.clone())
             print(f"Step {i}")
         z_final = chain[-1]
