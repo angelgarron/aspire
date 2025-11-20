@@ -6,9 +6,13 @@ import math
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
-import array_api_compat
 import numpy as np
-from array_api_compat import array_namespace, is_numpy_namespace, to_device
+from array_api_compat import (
+    array_namespace,
+    is_numpy_namespace,
+    is_torch_namespace,
+    to_device,
+)
 from array_api_compat import device as api_device
 from array_api_compat.common._typing import Array
 from matplotlib.figure import Figure
@@ -59,7 +63,6 @@ class BaseSamples:
 
     If None, the device will be inferred from the array namespace of :code:`x`.
     """
-    requires_grad: bool = False
 
     def __post_init__(self):
         if self.xp is None:
@@ -137,8 +140,8 @@ class BaseSamples:
             kwargs["dtype"] = resolve_dtype(dtype, self.xp)
         else:
             kwargs["dtype"] = self.dtype
-        if self.xp == array_api_compat.torch:
-            x = asarray(x, self.xp, requires_grad=self.requires_grad, **kwargs)
+        if is_torch_namespace(self.xp) and x.requires_grad:
+            x = asarray(x, self.xp, requires_grad=True, **kwargs)
         else:
             x = asarray(x, self.xp, **kwargs)
         if self.device:

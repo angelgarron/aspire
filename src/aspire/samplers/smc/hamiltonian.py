@@ -49,9 +49,7 @@ class HamiltonianSMC(SMCSampler):
         x_params, log_abs_det_jacobian = (
             self.preconditioning_transform.inverse(x_original)
         )
-        samples = SMCSamples(
-            x_params, xp=self.xp, dtype=self.dtype, requires_grad=True
-        )
+        samples = SMCSamples(x_params, xp=self.xp, dtype=self.dtype)
 
         # Compute log probabilities
         log_q = self.prior_flow.log_prob(samples.x)
