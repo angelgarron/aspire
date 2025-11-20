@@ -109,15 +109,12 @@ class HamiltonianSMC(SMCSampler):
         # Map to transformed dimension for sampling
         z = self.fit_preconditioning_transform(particles.x)
 
-        # Convert to torch arrays
-        z_torch = torch.asarray(to_numpy(z))
-
         # Start hamiltonian
         chain = []
 
         for i in range(n_steps or self.sampler_kwargs["n_steps"]):
-            z_torch = _hmc_step(z_torch, log_prob_fn)
-            chain.append(z_torch.clone())
+            z = _hmc_step(z, log_prob_fn)
+            chain.append(z.clone())
             print(f"Step {i}")
         z_final = chain[-1]
         # End hamiltonian
