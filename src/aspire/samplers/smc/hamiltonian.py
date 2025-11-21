@@ -5,7 +5,7 @@ import numpy as np
 from tqdm import trange
 
 from ...samples import SMCSamples
-from ...utils import asarray, to_numpy, track_calls
+from ...utils import to_numpy, track_calls
 from .base import SMCSampler
 
 
@@ -37,40 +37,6 @@ class HamiltonianSMC(SMCSampler):
         )
         self.key = None
         self.rng = rng or np.random.default_rng()
-
-    def log_prob(self, x, beta=None):
-        """Log probability function compatible with torch."""
-        # Convert to original xp format for computation
-        if hasattr(x, "__array__"):
-            x_original = asarray(x, self.xp, requires_grad=True)
-        else:
-            x_original = x
-
-        # Transform back to parameter space
-        x_params, log_abs_det_jacobian = (
-            self.preconditioning_transform.inverse(x_original)
-        )
-        samples = SMCSamples(x_params, xp=self.xp, dtype=self.dtype)
-
-        # Compute log probabilities
-        log_q = self.prior_flow.log_prob(samples.x)
-        samples.log_q = samples.array_to_namespace(log_q)
-        samples.log_prior = samples.array_to_namespace(self.log_prior(samples))
-        samples.log_likelihood = samples.array_to_namespace(
-            self.log_likelihood(samples)
-        )
-
-        # Compute target log probability
-        log_prob = samples.log_p_t(
-            beta=beta
-        ).flatten() + samples.array_to_namespace(log_abs_det_jacobian)
-
-        # Handle NaN values
-        log_prob = self.xp.where(
-            self.xp.isnan(log_prob), -self.xp.inf, log_prob
-        )
-
-        return log_prob
 
     @track_calls
     def sample(
@@ -135,21 +101,21 @@ class HamiltonianSMC(SMCSampler):
 
 
 def _hmc_step(x, log_prob, step_size=0.05, leapfrog_steps=10):
-    x = x.clone().detach().requires_grad_(True)
-
     # Sample momentum
     p = torch.randn_like(x)
 
     # Hamiltonian at start
+    x = x.detach().requires_grad_(True)
     current_log_prob = log_prob(x)
-    current_H = -current_log_prob + 0.5 * (p**2).sum(-1)
+    grad = torch.autograd.grad(current_log_prob.sum(), x)[0]
+    x = x.detach()
+    current_H = -current_log_prob.detach() + 0.5 * (p**2).sum(-1)
 
     # Leapfrog integration
     x_new = x
     p_new = p
 
     # initial half step for momentum
-    grad = torch.autograd.grad(current_log_prob.sum(), x_new)[0]
     p_new = p_new + 0.5 * step_size * grad
 
     for _ in range(leapfrog_steps):
@@ -157,9 +123,10 @@ def _hmc_step(x, log_prob, step_size=0.05, leapfrog_steps=10):
         x_new = x_new + step_size * p_new
 
         # compute gradient at new position
-        x_new = x_new.clone().detach().requires_grad_(True)
+        x_new = x_new.detach().requires_grad_(True)
         lp = log_prob(x_new)
         grad = torch.autograd.grad(lp.sum(), x_new)[0]
+        x_new = x_new.detach()
 
         # full step for momentum (except last iteration)
         p_new = p_new + step_size * grad
@@ -178,7 +145,7 @@ def _hmc_step(x, log_prob, step_size=0.05, leapfrog_steps=10):
     accept_prob = torch.exp(current_H - new_H)
     accept = torch.rand_like(accept_prob) < accept_prob
 
-    x_out = torch.where(accept.unsqueeze(-1), x_new.detach(), x.detach())
+    x_out = torch.where(accept.unsqueeze(-1), x_new, x)
     return x_out, accept
 
 

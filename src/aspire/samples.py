@@ -10,7 +10,7 @@ import numpy as np
 from array_api_compat import (
     array_namespace,
     is_numpy_namespace,
-    is_torch_namespace,
+    is_torch_array,
     to_device,
 )
 from array_api_compat import device as api_device
@@ -140,8 +140,8 @@ class BaseSamples:
             kwargs["dtype"] = resolve_dtype(dtype, self.xp)
         else:
             kwargs["dtype"] = self.dtype
-        if is_torch_namespace(self.xp) and x.requires_grad:
-            x = asarray(x, self.xp, requires_grad=True, **kwargs)
+        if is_torch_array(x):
+            x = asarray(x, self.xp, requires_grad=x.requires_grad, **kwargs)
         else:
             x = asarray(x, self.xp, **kwargs)
         if self.device:
