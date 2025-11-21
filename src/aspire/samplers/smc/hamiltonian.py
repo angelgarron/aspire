@@ -2,6 +2,7 @@ from functools import partial
 
 import array_api_compat.torch as torch
 import numpy as np
+from tqdm import trange
 
 from ...samples import SMCSamples
 from ...utils import asarray, to_numpy, track_calls
@@ -106,27 +107,19 @@ class HamiltonianSMC(SMCSampler):
 
         # Map to transformed dimension for sampling
         z = self.fit_preconditioning_transform(particles.x)
-
-        # Start hamiltonian
-        chain = []
-
-        for i in range(n_steps or self.sampler_kwargs["n_steps"]):
-            z = _hmc_step(
-                z,
-                log_prob_fn,
-                self.sampler_kwargs.get("step_size", 0.05),
-                self.sampler_kwargs.get("num_integration_steps", 10),
-            )
-            chain.append(z.clone())
-            print(f"Step {i}")
+        chain, accept = _hmc_sample(
+            x_init=z,
+            log_prob=log_prob_fn,
+            step_size=self.sampler_kwargs.get("step_size", 0.05),
+            leapfrog_steps=self.sampler_kwargs.get("leapfrog_steps", 10),
+            n_steps=n_steps or self.sampler_kwargs["n_steps"],
+        )
         z_final = chain[-1]
-        # End hamiltonian
-
         # Convert back to parameter space
         z_final_np = to_numpy(z_final)
         x = self.preconditioning_transform.inverse(z_final_np)[0]
 
-        # self.history.mcmc_acceptance.append(np.mean(history.acceptance_rate))
+        self.history.mcmc_acceptance.append(np.mean(accept.numpy().mean()))
 
         samples = SMCSamples(x, xp=self.xp, beta=beta, dtype=self.dtype)
         samples.log_q = samples.array_to_namespace(
@@ -141,7 +134,7 @@ class HamiltonianSMC(SMCSampler):
         return samples
 
 
-def _hmc_step(x, log_prob, step_size=0.05, n_steps=10):
+def _hmc_step(x, log_prob, step_size=0.05, leapfrog_steps=10):
     x = x.clone().detach().requires_grad_(True)
 
     # Sample momentum
@@ -159,7 +152,7 @@ def _hmc_step(x, log_prob, step_size=0.05, n_steps=10):
     grad = torch.autograd.grad(current_log_prob.sum(), x_new)[0]
     p_new = p_new + 0.5 * step_size * grad
 
-    for _ in range(n_steps):
+    for _ in range(leapfrog_steps):
         # full step for position
         x_new = x_new + step_size * p_new
 
@@ -186,4 +179,32 @@ def _hmc_step(x, log_prob, step_size=0.05, n_steps=10):
     accept = torch.rand_like(accept_prob) < accept_prob
 
     x_out = torch.where(accept.unsqueeze(-1), x_new.detach(), x.detach())
-    return x_out
+    return x_out, accept
+
+
+def _hmc_sample(
+    x_init,
+    log_prob,
+    step_size,
+    leapfrog_steps,
+    n_steps,
+    verbose=True,
+):
+    x = x_init
+    chain = []
+    with trange(
+        n_steps, desc="Sampling", unit="step", disable=not verbose
+    ) as pbar:
+        for i in pbar:
+            x, accept = _hmc_step(
+                x=x,
+                log_prob=log_prob,
+                step_size=step_size,
+                leapfrog_steps=leapfrog_steps,
+            )
+            chain.append(x.clone())
+            pbar_dict = {
+                "acceptance_rate": accept.numpy().mean(),
+            }
+            pbar.set_postfix(pbar_dict)
+    return chain, accept
