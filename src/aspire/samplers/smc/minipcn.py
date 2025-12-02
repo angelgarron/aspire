@@ -59,9 +59,7 @@ class MiniPCNSMC(NumpySMCSampler):
                 "target_acceptance_rate"
             ],
             discrete_parameters=self.sampler_kwargs["discrete_parameters"],
-            discrete_uniform_prior=self.sampler_kwargs[
-                "discrete_uniform_prior"
-            ],
+            discrete_priors=self.sampler_kwargs["discrete_priors"],
         )
         # Map to transformed dimension for sampling
         z = to_numpy(self.fit_preconditioning_transform(particles.x))
